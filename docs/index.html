@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚽ Predictor Mundial 2026</title>
+  <style>
+    :root{
+      --bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;
+      --muted:#8b949e;--accent:#2ea043;--media:#d29922;--baja:#f85149;
+    }
+    *{box-sizing:border-box;}
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      background:var(--bg);color:var(--text);margin:0;padding:24px;line-height:1.5;}
+    .wrap{max-width:860px;margin:0 auto;}
+    h1{font-size:1.6rem;margin:0 0 4px;}
+    .sub{color:var(--muted);font-size:.9rem;margin-bottom:24px;}
+    .card{background:var(--card);border:1px solid var(--border);
+      border-radius:12px;padding:20px;margin-bottom:20px;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+    .field{flex:1;min-width:180px;}
+    label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:6px;}
+    select,input,button{width:100%;padding:10px 12px;border-radius:8px;
+      border:1px solid var(--border);background:#0d1117;color:var(--text);font-size:.95rem;}
+    button{background:var(--accent);border:none;color:#fff;font-weight:600;
+      cursor:pointer;margin-top:8px;}
+    button:hover{filter:brightness(1.1);}
+    .error{color:var(--baja);margin-top:12px;}
+    .head{display:flex;justify-content:space-between;align-items:center;
+      flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+    .head h2{margin:0;font-size:1.3rem;}
+    .badge{padding:4px 12px;border-radius:999px;font-weight:700;font-size:.85rem;}
+    .alta{background:rgba(46,160,67,.2);color:var(--accent);}
+    .media{background:rgba(210,153,34,.2);color:var(--media);}
+    .baja{background:rgba(248,81,73,.2);color:var(--baja);}
+    .meta{color:var(--muted);font-size:.88rem;margin-bottom:18px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    @media(max-width:640px){.grid{grid-template-columns:1fr;}}
+    .bar-row{margin-bottom:10px;}
+    .bar-label{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:4px;}
+    .bar{background:#0d1117;border-radius:6px;height:22px;overflow:hidden;}
+    .bar>span{display:block;height:100%;background:var(--accent);}
+    .edge-pos{color:var(--accent);}.edge-neg{color:var(--baja);}
+    table{width:100%;border-collapse:collapse;font-size:.9rem;}
+    td{padding:6px 4px;border-bottom:1px solid var(--border);}
+    .pick{margin-top:16px;padding:14px;border-radius:8px;
+      background:rgba(46,160,67,.12);border:1px solid var(--accent);
+      font-size:1.05rem;font-weight:600;}
+    .stats{display:flex;gap:16px;flex-wrap:wrap;font-size:.9rem;margin-top:4px;}
+    .stats div{background:#0d1117;padding:8px 14px;border-radius:8px;}
+    .hint{color:var(--muted);font-size:.78rem;margin-top:8px;}
+    h3{margin-top:0;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>⚽ Predictor Mundial 2026</h1>
+    <div class="sub">Dixon-Coles (Poisson bivariado) · cálculo exacto · μ = 1.553 · corre 100% en tu navegador</div>
+
+    <div class="card">
+      <div class="row">
+        <div class="field">
+          <label>Local</label>
+          <select id="home"></select>
+        </div>
+        <div class="field">
+          <label>Visitante</label>
+          <select id="away"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Odds local (americanas)</label>
+          <input id="oh" type="number" value="-110">
+        </div>
+        <div class="field">
+          <label>Odds empate</label>
+          <input id="od" type="number" value="250">
+        </div>
+        <div class="field">
+          <label>Odds visitante</label>
+          <input id="oa" type="number" value="110">
+        </div>
+        <div class="field">
+          <label>Temp. (°C)</label>
+          <input id="temp" type="number" value="22">
+        </div>
+      </div>
+      <button id="calc">Calcular predicción</button>
+      <div class="hint">Las odds vienen con valores por defecto. Si tenés las reales del partido, cargalas para afinar el prior de mercado.</div>
+      <div class="error" id="error" style="display:none;"></div>
+    </div>
+
+    <div id="out"></div>
+  </div>
+
+<script>
+const MU = 1.553;
+
+const XG = {
+  "Argentina":{xg_for:2.20,pts:3},"Austria":{xg_for:2.00,pts:3},
+  "Algeria":{xg_for:0.92,pts:0},"Jordan":{xg_for:0.70,pts:0},
+  "France":{xg_for:2.10,pts:3},"Iraq":{xg_for:0.60,pts:0},
+  "Norway":{xg_for:2.50,pts:3},"Senegal":{xg_for:0.80,pts:0},
+  "Spain":{xg_for:2.29,pts:1},"Saudi Arabia":{xg_for:0.99,pts:1},
+  "Uruguay":{xg_for:1.54,pts:1},"Cape Verde":{xg_for:0.30,pts:1},
+  "Belgium":{xg_for:1.35,pts:1},"Egypt":{xg_for:1.08,pts:1},
+  "Iran":{xg_for:1.50,pts:1},"New Zealand":{xg_for:0.90,pts:1},
+  "Germany":{xg_for:4.22,pts:3},"Ivory Coast":{xg_for:1.68,pts:3},
+  "Ecuador":{xg_for:1.03,pts:0},"Curacao":{xg_for:0.41,pts:0},
+  "Netherlands":{xg_for:0.78,pts:1},"Japan":{xg_for:0.59,pts:1},
+  "Sweden":{xg_for:1.36,pts:3},"Tunisia":{xg_for:0.28,pts:0},
+  "Portugal":{xg_for:2.80,pts:1},"DR Congo":{xg_for:0.50,pts:1},
+  "Colombia":{xg_for:2.20,pts:3},"England":{xg_for:2.30,pts:3},
+  "Croatia":{xg_for:1.20,pts:0},"Brazil":{xg_for:1.23,pts:1},
+  "Morocco":{xg_for:1.53,pts:1},"Mexico":{xg_for:1.41,pts:3},
+  "South Korea":{xg_for:1.84,pts:3},"USA":{xg_for:1.35,pts:3},
+  "Australia":{xg_for:0.77,pts:3},"Switzerland":{xg_for:3.24,pts:1},
+  "Qatar":{xg_for:0.76,pts:1},"Canada":{xg_for:1.25,pts:1},
+  "Scotland":{xg_for:1.05,pts:3},"Haiti":{xg_for:1.21,pts:0},
+};
+
+const ELO = {
+  "Argentina":1950,"France":1980,"Brazil":1950,"Spain":1920,"Germany":1930,
+  "England":1890,"Netherlands":1870,"Portugal":1860,"Belgium":1840,"Norway":1800,
+  "Mexico":1800,"USA":1750,"Morocco":1760,"Uruguay":1800,"Switzerland":1781,
+  "Colombia":1800,"Japan":1760,"South Korea":1754,"Australia":1680,"Sweden":1780,
+  "Austria":1820,"Ivory Coast":1760,"Ecuador":1710,"Senegal":1780,"Canada":1741,
+  "Scotland":1650,"Croatia":1820,"Qatar":1591,"Algeria":1750,"Iraq":1480,
+  "Tunisia":1600,"Iran":1720,"Saudi Arabia":1680,"Egypt":1700,"Jordan":1500,
+  "Cape Verde":1580,"New Zealand":1560,"Haiti":1450,"Curacao":1430,"DR Congo":1526,
+  "Bosnia":1589,"Paraguay":1660,"Turkey":1740,"South Africa":1526,"Ghana":1650,
+  "Panama":1580,"Uzbekistan":1620,
+};
+
+const TEAMS = [...new Set([...Object.keys(XG), ...Object.keys(ELO)])].sort();
+
+const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
+const fact = n => { let r=1; for(let k=2;k<=n;k++) r*=k; return r; };
+const poisson = (k,l) => Math.exp(-l)*Math.pow(l,k)/fact(k);
+
+function dixonColes(i,j,lh,la,rho){
+  if(i===0&&j===0) return 1-lh*la*rho;
+  if(i===0&&j===1) return 1+lh*rho;
+  if(i===1&&j===0) return 1+la*rho;
+  if(i===1&&j===1) return 1-rho;
+  return 1;
+}
+
+function devig(oh,od,oa){
+  const p = o => o<0 ? Math.abs(o)/(Math.abs(o)+100) : 100/(o+100);
+  let ph=p(oh), pd=p(od), pa=p(oa), t=ph+pd+pa;
+  return [ph/t, pd/t, pa/t];
+}
+
+function buildLambda(home,away,odds,tempC){
+  const sh=0.65;
+  const xgH = (XG[home]?.xg_for) ?? MU;
+  const xgA = (XG[away]?.xg_for) ?? MU;
+  const ptsH = (XG[home]?.pts) ?? 1;
+  const ptsA = (XG[away]?.pts) ?? 1;
+  let lh = sh*xgH+(1-sh)*MU;
+  let la = sh*xgA+(1-sh)*MU;
+  const eloH = ELO[home] ?? 1650, eloA = ELO[away] ?? 1650, diff = eloH-eloA;
+  lh *= clamp(1+0.00028*diff,0.78,1.22);
+  la *= clamp(1-0.00028*diff,0.78,1.22);
+  if(ptsH===0) lh*=1.15; else if(ptsH>=3) lh*=0.92;
+  if(ptsA===0) la*=1.15; else if(ptsA>=3) la*=0.92;
+  if(tempC>32){ const f=Math.max(0.85,1-(tempC-32)*0.008); lh*=f; la*=f; }
+  const [phM,,paM] = devig(odds.home,odds.draw,odds.away);
+  const ratio = phM/Math.max(paM,0.01);
+  const lhMkt = MU*Math.sqrt(ratio)*0.92;
+  const laMkt = MU/Math.sqrt(ratio)*0.92;
+  let lhF = 0.65*lh+0.35*lhMkt;
+  let laF = 0.65*la+0.35*laMkt;
+  const xgTot = lhF+laF;
+  const rho = xgTot<2.5 ? -0.07 : (xgTot<3.5 ? -0.05 : -0.03);
+  return [clamp(lhF,0.30,4.0), clamp(laF,0.30,4.0), rho];
+}
+
+function computeProbs(lh,la,rho,maxG=8){
+  const P=[]; let sum=0;
+  for(let i=0;i<=maxG;i++){ P[i]=[]; for(let j=0;j<=maxG;j++){
+    const p = poisson(i,lh)*poisson(j,la)*Math.max(dixonColes(i,j,lh,la,rho),0);
+    P[i][j]=p; sum+=p;
+  }}
+  let pw=0,pd=0,pl=0,o25=0,btts=0,csh=0; const scores=[];
+  for(let i=0;i<=maxG;i++) for(let j=0;j<=maxG;j++){
+    const p=P[i][j]/sum;
+    if(i>j) pw+=p; else if(i===j) pd+=p; else pl+=p;
+    if(i+j>2) o25+=p;
+    if(i>0&&j>0) btts+=p;
+    if(j===0) csh+=p;
+    scores.push([i,j,p]);
+  }
+  scores.sort((a,b)=>b[2]-a[2]);
+  return {pw,pd,pl,o25,u25:1-o25,btts,csh,top:scores.slice(0,6),lh,la,rho};
+}
+
+function analizar(home,away,odds,tempC){
+  const [lh,la,rho]=buildLambda(home,away,odds,tempC);
+  const r=computeProbs(lh,la,rho);
+  const [phM,pdM,paM]=devig(odds.home,odds.draw,odds.away);
+  const eh=r.pw-phM, ed=r.pd-pdM, ea=r.pl-paM;
+  const converge = Math.abs(eh)<0.08 && Math.abs(ea)<0.08;
+  const mx=Math.max(r.pw,r.pd,r.pl);
+  let pick;
+  if(r.pw>0.55) pick=`${home} gana`;
+  else if(r.pl>0.55) pick=`${away} gana`;
+  else if(r.pd>0.30) pick="Empate";
+  else pick=`Parejo (máx ${(mx*100).toFixed(0)}%)`;
+  let conf,confClass;
+  if(mx>0.65&&converge){conf="ALTA";confClass="alta";}
+  else if(mx>0.50&&converge){conf="MEDIA";confClass="media";}
+  else{conf="BAJA";confClass="baja";}
+  return {home,away,r,phM,pdM,paM,eh,ed,ea,converge,pick,conf,confClass,
+          lh,la,rho,xgTot:lh+la,tempC};
+}
+
+function render(d){
+  const r=d.r, pct=v=>(v*100).toFixed(1), p0=v=>(v*100).toFixed(0);
+  const edge=v=>{const s=(v*100).toFixed(1);
+    return `<span class="${v>=0?'edge-pos':'edge-neg'}">(${v>=0?'+':''}${s}%)</span>`;};
+  const bar=(name,p,e)=>`
+    <div class="bar-row">
+      <div class="bar-label"><span>${name}</span>
+        <span>${pct(p)}% ${edge(e)}</span></div>
+      <div class="bar"><span style="width:${(p*100).toFixed(1)}%"></span></div>
+    </div>`;
+  const scores=r.top.map((s,i)=>`<tr><td>${i===0?'⭐':(i+1)+'.'} ${s[0]}-${s[1]}</td>
+    <td style="text-align:right">${(s[2]*100).toFixed(2)}%</td></tr>`).join('');
+  const top=r.top[0];
+  document.getElementById('out').innerHTML=`
+    <div class="card">
+      <div class="head">
+        <h2>${d.home} vs ${d.away}</h2>
+        <span class="badge ${d.confClass}">Confianza ${d.conf}</span>
+      </div>
+      <div class="meta">🌡️ ${d.tempC.toFixed(1)}°C · λ ${d.lh.toFixed(2)} vs ${d.la.toFixed(2)}
+        · ρ=${d.rho} · xG total ${d.xgTot.toFixed(2)}${d.converge?'':' · ⚠️ diverge del mercado'}</div>
+      <div class="grid">
+        <div>
+          <h3>🎲 1X2</h3>
+          ${bar(d.home,r.pw,d.eh)}
+          ${bar('Empate',r.pd,d.ed)}
+          ${bar(d.away,r.pl,d.ea)}
+        </div>
+        <div>
+          <h3>🏆 Top marcadores</h3>
+          <table>${scores}</table>
+        </div>
+      </div>
+      <div class="stats">
+        <div>O2.5 <b>${p0(r.o25)}%</b></div>
+        <div>U2.5 <b>${p0(r.u25)}%</b></div>
+        <div>BTTS <b>${p0(r.btts)}%</b></div>
+        <div>Valla local <b>${p0(r.csh)}%</b></div>
+      </div>
+      <div class="pick">📋 ${d.pick} · Resultado más probable ${top[0]}-${top[1]} (${(top[2]*100).toFixed(1)}%)</div>
+    </div>`;
+}
+
+function init(){
+  const hs=document.getElementById('home'), as=document.getElementById('away');
+  TEAMS.forEach(t=>{
+    hs.add(new Option(t,t));
+    as.add(new Option(t,t));
+  });
+  hs.value="Argentina"; as.value="Austria";
+  document.getElementById('calc').addEventListener('click',()=>{
+    const err=document.getElementById('error');
+    const home=hs.value, away=as.value;
+    if(home===away){err.textContent="⚠️ El local y el visitante no pueden ser el mismo equipo.";
+      err.style.display='block'; return;}
+    err.style.display='none';
+    const odds={home:+document.getElementById('oh').value,
+                draw:+document.getElementById('od').value,
+                away:+document.getElementById('oa').value};
+    const temp=+document.getElementById('temp').value;
+    render(analizar(home,away,odds,temp));
+  });
+}
+init();
+</script>
+</body>
+</html>
