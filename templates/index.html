@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚽ Predictor Mundial 2026</title>
+  <style>
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --accent: #2ea043;
+      --alta: #2ea043; --media: #d29922; --baja: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); margin: 0; padding: 24px;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: .9rem; margin-bottom: 24px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; margin-bottom: 20px;
+    }
+    form .row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    form .field { flex: 1; min-width: 200px; }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+    select, button {
+      width: 100%; padding: 10px 12px; border-radius: 8px;
+      border: 1px solid var(--border); background: #0d1117; color: var(--text);
+      font-size: .95rem;
+    }
+    .check { display: flex; align-items: center; gap: 8px; }
+    .check input { width: auto; }
+    button {
+      background: var(--accent); border: none; color: white; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
+    }
+    button:hover { filter: brightness(1.1); }
+    .error { color: var(--baja); margin-bottom: 14px; }
+    .head {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+    }
+    .head h2 { margin: 0; font-size: 1.3rem; }
+    .badge {
+      padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: .85rem;
+    }
+    .alta { background: rgba(46,160,67,.2); color: var(--alta); }
+    .media { background: rgba(210,153,34,.2); color: var(--media); }
+    .baja { background: rgba(248,81,73,.2); color: var(--baja); }
+    .meta { color: var(--muted); font-size: .88rem; margin-bottom: 18px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+    .bar-row { margin-bottom: 10px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: 4px; }
+    .bar { background: #0d1117; border-radius: 6px; height: 22px; overflow: hidden; }
+    .bar > span { display: block; height: 100%; background: var(--accent); }
+    .edge-pos { color: var(--alta); }
+    .edge-neg { color: var(--baja); }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    td { padding: 6px 4px; border-bottom: 1px solid var(--border); }
+    .pick {
+      margin-top: 16px; padding: 14px; border-radius: 8px;
+      background: rgba(46,160,67,.12); border: 1px solid var(--accent);
+      font-size: 1.05rem; font-weight: 600;
+    }
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: .9rem; margin-top: 4px; }
+    .stats div { background: #0d1117; padding: 8px 14px; border-radius: 8px; }
+    .stats b { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>⚽ Predictor Mundial 2026</h1>
+    <div class="sub">Dixon-Coles + Monte Carlo (300k) · μ = 1.553</div>
+
+    <div class="card">
+      <form method="POST">
+        <div class="row">
+          <div class="field">
+            <label>Local</label>
+            <select name="home" required>
+              <option value="">— Elegí —</option>
+              {% for t in teams %}
+              <option value="{{ t }}" {% if t == home %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Visitante</label>
+            <select name="away" required>
+              <option value="">— Elegí —</option>
+              {% for t in teams %}
+              <option value="{{ t }}" {% if t == away %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Sede</label>
+            <select name="venue">
+              <option value="">Por defecto</option>
+              {% for v in venues %}
+              <option value="{{ v }}" {% if v == venue %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="check">
+          <input type="checkbox" name="use_live" id="use_live" {% if use_live %}checked{% endif %}>
+          <label for="use_live" style="margin:0;">Usar datos en vivo (odds + clima vía APIs)</label>
+        </div>
+        <button type="submit">Calcular predicción</button>
+      </form>
+      {% if error %}<div class="error" style="margin-top:12px;">⚠️ {{ error }}</div>{% endif %}
+    </div>
+
+    {% if result %}
+    <div class="card">
+      <div class="head">
+        <h2>{{ result.home }} vs {{ result.away }}</h2>
+        <span class="badge {{ result.conf_class }}">Confianza {{ result.conf }}</span>
+      </div>
+      <div class="meta">
+        📍 {{ result.city }} · 🌡️ {{ "%.1f"|format(result.temp) }}°C ·
+        λ {{ "%.2f"|format(result.lh) }} vs {{ "%.2f"|format(result.la) }} ·
+        ρ={{ result.rho }} · xG total {{ "%.2f"|format(result.xg_total) }}
+        {% if not result.converge %} · ⚠️ diverge del mercado{% endif %}
+      </div>
+
+      <div class="grid">
+        <div>
+          <h3 style="margin-top:0;">🎲 1X2</h3>
+          {% set rows = [(result.home, result.pw, result.mkt_h, result.eh),
+                         ('Empate', result.pd, result.mkt_d, result.ed),
+                         (result.away, result.pl, result.mkt_a, result.ea)] %}
+          {% for name, p, mkt, edge in rows %}
+          <div class="bar-row">
+            <div class="bar-label">
+              <span>{{ name }}</span>
+              <span>{{ "%.1f"|format(p) }}%
+                <span class="{{ 'edge-pos' if edge >= 0 else 'edge-neg' }}">
+                  ({{ "%+.1f"|format(edge) }}%)
+                </span>
+              </span>
+            </div>
+            <div class="bar"><span style="width: {{ p }}%;"></span></div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div>
+          <h3 style="margin-top:0;">🏆 Top marcadores</h3>
+          <table>
+            {% for s in result.top %}
+            <tr><td>{{ "⭐" if loop.first else loop.index ~ "." }} {{ s.score }}</td>
+                <td style="text-align:right;">{{ "%.2f"|format(s.prob) }}%</td></tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div>O2.5 <b>{{ "%.0f"|format(result.o25) }}%</b></div>
+        <div>U2.5 <b>{{ "%.0f"|format(result.u25) }}%</b></div>
+        <div>BTTS <b>{{ "%.0f"|format(result.btts) }}%</b></div>
+        <div>Valla local <b>{{ "%.0f"|format(result.cs_h) }}%</b></div>
+      </div>
+
+      <div class="pick">
+        📋 {{ result.pick }} · Resultado más probable {{ result.score }}
+        ({{ "%.1f"|format(result.score_prob) }}%)
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
