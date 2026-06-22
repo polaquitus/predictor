@@ -70,6 +70,12 @@
       </div>
       <div class="row">
         <div class="field">
+          <label>Sede (para el clima)</label>
+          <select id="venue"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
           <label>Odds local (americanas)</label>
           <input id="oh" type="number" value="-110">
         </div>
@@ -86,8 +92,11 @@
           <input id="temp" type="number" value="22">
         </div>
       </div>
-      <button id="calc">Calcular predicción</button>
-      <div class="hint">Las odds vienen con valores por defecto. Si tenés las reales del partido, cargalas para afinar el prior de mercado.</div>
+      <div class="row">
+        <div class="field"><button id="live" style="background:#1f6feb">🔄 Traer datos en vivo (odds + clima)</button></div>
+        <div class="field"><button id="calc">Calcular predicción</button></div>
+      </div>
+      <div class="hint" id="status">Tip: apretá "Traer datos en vivo" para completar odds y temperatura automáticamente desde las APIs. Si fallan (red corporativa / cupo agotado), cargalas a mano.</div>
       <div class="error" id="error" style="display:none;"></div>
     </div>
 
@@ -96,6 +105,27 @@
 
 <script>
 const MU = 1.553;
+
+// API keys (públicas en repo estático — ver advertencia en el README)
+const ODDS_KEY = "9574821f5581af26cae631a39a7fc6ec";
+
+// Sedes WC2026 -> [lat, lon] para el clima (Open-Meteo, sin key)
+const VENUES = {
+  "AT&T Stadium (Dallas)":[32.75,-97.09],
+  "MetLife (New Jersey)":[40.81,-74.07],
+  "SoFi (Los Angeles)":[33.95,-118.34],
+  "Lincoln Financial (Philadelphia)":[39.90,-75.17],
+  "Levi's (Santa Clara)":[37.40,-121.97],
+  "NRG (Houston)":[29.68,-95.41],
+  "Arrowhead (Kansas City)":[39.05,-94.48],
+  "Lumen Field (Seattle)":[47.60,-122.33],
+  "Hard Rock (Miami)":[25.96,-80.24],
+  "BMO Field (Toronto)":[43.63,-79.41],
+  "BC Place (Vancouver)":[49.27,-123.11],
+  "Estadio Azteca (Mexico City)":[19.30,-99.15],
+  "Estadio BBVA (Monterrey)":[25.66,-100.24],
+  "Akron (Guadalajara)":[20.60,-103.46],
+};
 
 const XG = {
   "Argentina":{xg_for:2.20,pts:3},"Austria":{xg_for:2.00,pts:3},
@@ -260,15 +290,67 @@ function render(d){
     </div>`;
 }
 
+// --- APIs en vivo (se llaman directo desde el navegador) ---
+
+async function fetchOdds(home, away){
+  const url = `https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup_2026/odds/`
+            + `?apiKey=${ODDS_KEY}&regions=us,uk&markets=h2h&oddsFormat=american`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`Odds API ${res.status}`);
+  const games = await res.json();
+  const hc = home.toLowerCase().split(' ')[0];
+  const ac = away.toLowerCase().split(' ')[0];
+  // 1º intento: que coincidan ambos equipos; 2º: alguno
+  const match = games.find(g => {
+    const ht=(g.home_team||'').toLowerCase(), at=(g.away_team||'').toLowerCase();
+    return (ht.includes(hc)&&at.includes(ac)) || (ht.includes(ac)&&at.includes(hc));
+  }) || games.find(g => {
+    const ht=(g.home_team||'').toLowerCase(), at=(g.away_team||'').toLowerCase();
+    return ht.includes(hc)||at.includes(ac)||ht.includes(ac)||at.includes(hc);
+  });
+  if(!match) return null;
+  for(const bk of (match.bookmakers||[])){
+    for(const mkt of (bk.markets||[])){
+      if(mkt.key==='h2h'){
+        const m={};
+        mkt.outcomes.forEach(o => m[o.name.toLowerCase()] = o.price);
+        const ht=(match.home_team||'').toLowerCase(), at=(match.away_team||'').toLowerCase();
+        // mapear según quién es local/visitante en NUESTRA selección
+        const homeIsApiHome = ht.includes(hc);
+        return {
+          home: homeIsApiHome ? m[ht] : m[at],
+          away: homeIsApiHome ? m[at] : m[ht],
+          draw: m['draw'] ?? 250,
+          book: bk.title,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchWeather(venueName){
+  const c = VENUES[venueName];
+  if(!c) return null;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${c[0]}&longitude=${c[1]}`
+            + `&current=temperature_2m&temperature_unit=celsius`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`Open-Meteo ${res.status}`);
+  const d = await res.json();
+  return d.current.temperature_2m;
+}
+
 function init(){
   const hs=document.getElementById('home'), as=document.getElementById('away');
-  TEAMS.forEach(t=>{
-    hs.add(new Option(t,t));
-    as.add(new Option(t,t));
-  });
+  const vs=document.getElementById('venue');
+  TEAMS.forEach(t=>{ hs.add(new Option(t,t)); as.add(new Option(t,t)); });
+  Object.keys(VENUES).forEach(v=> vs.add(new Option(v,v)));
   hs.value="Argentina"; as.value="Austria";
+
+  const status=document.getElementById('status');
+  const err=document.getElementById('error');
+
   document.getElementById('calc').addEventListener('click',()=>{
-    const err=document.getElementById('error');
     const home=hs.value, away=as.value;
     if(home===away){err.textContent="⚠️ El local y el visitante no pueden ser el mismo equipo.";
       err.style.display='block'; return;}
@@ -278,6 +360,34 @@ function init(){
                 away:+document.getElementById('oa').value};
     const temp=+document.getElementById('temp').value;
     render(analizar(home,away,odds,temp));
+  });
+
+  document.getElementById('live').addEventListener('click', async ()=>{
+    const home=hs.value, away=as.value;
+    err.style.display='none';
+    if(home===away){err.textContent="⚠️ El local y el visitante no pueden ser el mismo equipo.";
+      err.style.display='block'; return;}
+    status.textContent="⏳ Buscando odds y clima en vivo...";
+    let okOdds=false, okTemp=false, msgs=[];
+    try{
+      const o = await fetchOdds(home, away);
+      if(o){
+        document.getElementById('oh').value=o.home;
+        document.getElementById('od').value=o.draw;
+        document.getElementById('oa').value=o.away;
+        okOdds=true; msgs.push(`odds de ${o.book}`);
+      }else{ msgs.push("odds: no se encontró este partido en la API (¿todavía sin línea?)"); }
+    }catch(e){ msgs.push(`odds falló (${e.message} — CORS/red/cupo)`); }
+    try{
+      const t = await fetchWeather(vs.value);
+      if(t!==null && t!==undefined){
+        document.getElementById('temp').value=t;
+        okTemp=true; msgs.push(`clima ${t}°C`);
+      }
+    }catch(e){ msgs.push(`clima falló (${e.message})`); }
+    status.textContent = (okOdds||okTemp ? "✅ " : "⚠️ ") + msgs.join(" · ");
+    // si trajo algo, calcula automáticamente
+    if(okOdds||okTemp) document.getElementById('calc').click();
   });
 }
 init();
