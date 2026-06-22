@@ -60,6 +60,32 @@
     <div class="card">
       <div class="row">
         <div class="field">
+          <label>🔑 The Odds API key (<a href="https://the-odds-api.com/#get-access" target="_blank" style="color:#58a6ff">obtener gratis</a>)</label>
+          <input id="kOdds" type="text" placeholder="pegá tu key acá">
+        </div>
+        <div class="field">
+          <label>🔑 API-Football key (<a href="https://dashboard.api-football.com/register" target="_blank" style="color:#58a6ff">obtener gratis</a>)</label>
+          <input id="kAF" type="text" placeholder="pegá tu key acá (opcional, para partidos del día)">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><button id="saveKeys" style="background:#6e40c9">💾 Guardar keys (se quedan en tu navegador)</button></div>
+      </div>
+      <div class="hint">Las keys se guardan solo en este navegador (localStorage), no se suben a ningún lado. Necesitás registrarte gratis en cada servicio para obtenerlas.</div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div class="field">
+          <label>📅 Partidos de hoy (requiere key de API-Football)</label>
+          <select id="todayMatch"><option value="">— apretá "Buscar partidos de hoy" —</option></select>
+        </div>
+        <div class="field" style="flex:0 0 auto;align-self:end;">
+          <button id="loadToday" style="background:#1f6feb">📅 Buscar partidos de hoy</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
           <label>Local</label>
           <select id="home"></select>
         </div>
@@ -106,8 +132,9 @@
 <script>
 const MU = 1.553;
 
-// API keys (públicas en repo estático — ver advertencia en el README)
-const ODDS_KEY = "9574821f5581af26cae631a39a7fc6ec";
+// Las keys las guarda el usuario en su navegador (localStorage). No van en el repo.
+const getOddsKey = () => localStorage.getItem('oddsKey') || '';
+const getAFKey   = () => localStorage.getItem('afKey')   || '';
 
 // Sedes WC2026 -> [lat, lon] para el clima (Open-Meteo, sin key)
 const VENUES = {
@@ -293,9 +320,12 @@ function render(d){
 // --- APIs en vivo (se llaman directo desde el navegador) ---
 
 async function fetchOdds(home, away){
-  const url = `https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup_2026/odds/`
-            + `?apiKey=${ODDS_KEY}&regions=us,uk&markets=h2h&oddsFormat=american`;
+  const key = getOddsKey();
+  if(!key) throw new Error("falta tu key de The Odds API (guardala arriba)");
+  const url = `https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/odds/`
+            + `?apiKey=${key}&regions=us,uk&markets=h2h&oddsFormat=american`;
   const res = await fetch(url);
+  if(res.status===401||res.status===403) throw new Error("key inválida/inactiva (401/403)");
   if(!res.ok) throw new Error(`Odds API ${res.status}`);
   const games = await res.json();
   const hc = home.toLowerCase().split(' ')[0];
@@ -340,6 +370,41 @@ async function fetchWeather(venueName){
   return d.current.temperature_2m;
 }
 
+// Alias: nombres de API-Football -> nombres de nuestra base
+const AF_ALIAS = {
+  "usa":"USA","united states":"USA","korea republic":"South Korea",
+  "south korea":"South Korea","ivory coast":"Ivory Coast","cote d'ivoire":"Ivory Coast",
+  "dr congo":"DR Congo","congo dr":"DR Congo","czechia":"Czechia",
+  "cape verde islands":"Cape Verde","cabo verde":"Cape Verde","türkiye":"Turkey","turkiye":"Turkey",
+};
+function mapTeam(name){
+  if(!name) return null;
+  const low = name.toLowerCase().trim();
+  if(AF_ALIAS[low]) return AF_ALIAS[low];
+  // match exacto o por primera palabra contra nuestra lista
+  const exact = TEAMS.find(t => t.toLowerCase()===low);
+  if(exact) return exact;
+  const first = low.split(' ')[0];
+  return TEAMS.find(t => t.toLowerCase().startsWith(first)) || name;
+}
+
+async function fetchTodayMatches(){
+  const key = getAFKey();
+  if(!key) throw new Error("falta tu key de API-Football (guardala arriba)");
+  const today = new Date().toISOString().slice(0,10);
+  // league 1 = FIFA World Cup en API-Football
+  const url = `https://v3.football.api-sports.io/fixtures?league=1&season=2026&date=${today}`;
+  const res = await fetch(url, { headers: { "x-apisports-key": key } });
+  if(!res.ok) throw new Error(`API-Football ${res.status}`);
+  const data = await res.json();
+  return (data.response||[]).map(f => ({
+    home: mapTeam(f.teams?.home?.name),
+    away: mapTeam(f.teams?.away?.name),
+    homeRaw: f.teams?.home?.name, awayRaw: f.teams?.away?.name,
+    time: (f.fixture?.date||'').slice(11,16),
+  }));
+}
+
 function init(){
   const hs=document.getElementById('home'), as=document.getElementById('away');
   const vs=document.getElementById('venue');
@@ -349,6 +414,38 @@ function init(){
 
   const status=document.getElementById('status');
   const err=document.getElementById('error');
+
+  // --- Keys: cargar guardadas y permitir guardar ---
+  document.getElementById('kOdds').value = getOddsKey();
+  document.getElementById('kAF').value   = getAFKey();
+  document.getElementById('saveKeys').addEventListener('click',()=>{
+    localStorage.setItem('oddsKey', document.getElementById('kOdds').value.trim());
+    localStorage.setItem('afKey',   document.getElementById('kAF').value.trim());
+    status.textContent="✅ Keys guardadas en tu navegador.";
+  });
+
+  // --- Partidos de hoy (API-Football) ---
+  const tm=document.getElementById('todayMatch');
+  document.getElementById('loadToday').addEventListener('click', async ()=>{
+    err.style.display='none';
+    status.textContent="⏳ Buscando partidos de hoy...";
+    try{
+      const matches = await fetchTodayMatches();
+      tm.innerHTML='<option value="">— elegí un partido —</option>';
+      if(!matches.length){ status.textContent="ℹ️ No hay partidos del Mundial hoy."; return; }
+      matches.forEach((m,i)=>{
+        tm.add(new Option(`${m.time}  ${m.homeRaw} vs ${m.awayRaw}`, i));
+      });
+      tm._matches = matches;
+      status.textContent=`✅ ${matches.length} partido(s) de hoy.`;
+    }catch(e){ status.textContent=`⚠️ ${e.message}`; }
+  });
+  tm.addEventListener('change',()=>{
+    const m = tm._matches?.[tm.value];
+    if(!m) return;
+    if(TEAMS.includes(m.home)) hs.value=m.home;
+    if(TEAMS.includes(m.away)) as.value=m.away;
+  });
 
   document.getElementById('calc').addEventListener('click',()=>{
     const home=hs.value, away=as.value;
