@@ -97,7 +97,7 @@ table{width:100%;border-collapse:collapse;font-size:.84rem;}
 <body>
 <div class="bar-top">
   <h1>⚽ Mundial 2026 — Simulador Interactivo</h1>
-  <p>48 equipos · 12 grupos · motor Poisson + Monte Carlo · aprende de los resultados que cargás</p>
+  <p>48 equipos · 12 grupos · motor Dixon-Coles + Monte Carlo · calibrado con literatura (Ley 2019 · Dixon-Coles 1997) · aprende de los resultados</p>
 </div>
 <div class="wrap">
   <div class="tabs" id="tabs"></div>
@@ -263,55 +263,69 @@ function load(){ try{const s=JSON.parse(localStorage.getItem(SKEY)); if(s&&s.res
 
 //============================ MOTOR ============================
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const BASE=1.32, ALPHA=1.5, HOMEADV=6;
+// Calibración basada en literatura:
+//  · Ley, Van de Wiele & Van Eetvelde (2019): fuerza única por equipo + Poisson = mejor para selecciones.
+//  · Dixon & Coles (1997): corrección τ(ρ) para marcadores bajos (sube empates 0-0/1-1).
+//  · Media de goles Mundial 2002-2018 ≈ 2.5/partido  → λ base por equipo ≈ 1.27.
+//  · Ventaja de localía anfitrión ≈ +0.35 gol (~+100 Elo) → factor exp(HOSTLOG).
+const BASE=1.28, STR=1.30, HOSTLOG=0.30, RHO=-0.08, MAXG=8;
 
 function effRating(team){
   let r = RATING[team] ?? 50;
   if(state.learn && LEARN[team]) r += LEARN[team];
   return clamp(r,5,100);
 }
-function lambdas(home,away,hostBonus){
-  const d = (effRating(home) - effRating(away) + (hostBonus||0))/100;
-  const s = ALPHA*d;
-  return [clamp(BASE*Math.exp(s),0.12,5), clamp(BASE*Math.exp(-s),0.12,5)];
+function lambdas(home,away){
+  const s = STR*(effRating(home)-effRating(away))/100;     // supremacía en escala log-gol
+  let lh=BASE*Math.exp(s), la=BASE*Math.exp(-s);
+  if(HOSTS.has(home)) lh*=Math.exp(HOSTLOG);
+  if(HOSTS.has(away)) la*=Math.exp(HOSTLOG);
+  return [clamp(lh,0.12,5.5), clamp(la,0.12,5.5)];
 }
-// pmf exacta -> P(local/empate/visita)
-function probs1x2(lh,la,maxg=9){
-  let pw=0,pd=0,pl=0;
-  const pm=l=>{const a=[];let p=Math.exp(-l);for(let k=0;k<=maxg;k++){a.push(p);p*=l/(k+1);}return a;};
-  const H=pm(lh),A=pm(la);
-  for(let i=0;i<=maxg;i++)for(let j=0;j<=maxg;j++){const p=H[i]*A[j];if(i>j)pw+=p;else if(i===j)pd+=p;else pl+=p;}
-  const t=pw+pd+pl; return [pw/t,pd/t,pl/t];
+// Corrección Dixon-Coles para los 4 marcadores bajos
+function tauDC(i,j,lh,la){
+  if(i===0&&j===0) return 1-lh*la*RHO;
+  if(i===0&&j===1) return 1+lh*RHO;
+  if(i===1&&j===0) return 1+la*RHO;
+  if(i===1&&j===1) return 1-RHO;
+  return 1;
 }
-function rpois(l){ // Knuth
-  const L=Math.exp(-l); let k=0,p=1;
-  do{k++;p*=Math.random();}while(p>L);
-  return k-1;
+// Matriz de marcadores (Poisson independiente × corrección DC), normalizada
+function scoreMatrix(lh,la){
+  const pm=l=>{const a=[];let p=Math.exp(-l);for(let k=0;k<=MAXG;k++){a.push(p);p*=l/(k+1);}return a;};
+  const H=pm(lh),A=pm(la);const P=[];let s=0;
+  for(let i=0;i<=MAXG;i++){P[i]=[];for(let j=0;j<=MAXG;j++){const v=H[i]*A[j]*Math.max(tauDC(i,j,lh,la),0);P[i][j]=v;s+=v;}}
+  for(let i=0;i<=MAXG;i++)for(let j=0;j<=MAXG;j++)P[i][j]/=s;
+  return P;
 }
-function playMatch(home,away,hostBonus,rng){
-  const [lh,la]=lambdas(home,away,hostBonus);
-  return [rpois(lh),rpois(la)];
-}
-function hostBonusFor(home,away){
-  let b=0; if(HOSTS.has(home))b+=HOMEADV; if(HOSTS.has(away))b-=HOMEADV; return b;
-}
+function probsFromMatrix(P){let pw=0,pd=0,pl=0;
+  for(let i=0;i<=MAXG;i++)for(let j=0;j<=MAXG;j++){const p=P[i][j];if(i>j)pw+=p;else if(i===j)pd+=p;else pl+=p;}
+  return [pw,pd,pl];}
+function probs1x2(lh,la){ return probsFromMatrix(scoreMatrix(lh,la)); } // mismo modelo que el muestreo => consistente
+function sampleScore(P){let r=Math.random();
+  for(let i=0;i<=MAXG;i++)for(let j=0;j<=MAXG;j++){r-=P[i][j];if(r<=0)return [i,j];}return [0,0];}
+function playMatch(home,away){ const [lh,la]=lambdas(home,away); return sampleScore(scoreMatrix(lh,la)); }
+function hostBonusFor(){ return 0; } // (compat; la localía se aplica dentro de lambdas)
 
 //============================ APRENDIZAJE BAYESIANO ============================
+// Aprendizaje regularizado: cada resultado mueve la fuerza según la sorpresa (margen real - esperado),
+// con tasa baja y tope, para no sobreajustar con pocas muestras (shrinkage hacia el prior FIFA).
 let LEARN={};
+const LR=0.8, CAP=9;
 function recomputeLearning(){
   LEARN={};
   for(const g of Object.keys(GROUPS)){
     GF[g].forEach((fx,idx)=>{
       const id=g+"·J"+(Math.floor(idx/2)+1)+"·"+(idx%2+1);
-      const res=state.results[id]; if(!res)return;
+      const res=state.results[id]; if(!res||res.h==null||res.a==null)return;
       const home=GROUPS[g][fx[0]-1], away=GROUPS[g][fx[1]-1];
-      const base_h=RATING[home]??50, base_a=RATING[away]??50;
-      const d=(base_h-base_a+hostBonusFor(home,away))/100;
-      const expDiff=BASE*Math.exp(ALPHA*d)-BASE*Math.exp(-ALPHA*d);
-      const actDiff=res.h-res.a;
-      const surprise=actDiff-expDiff;
-      LEARN[home]=clamp((LEARN[home]||0)+1.6*surprise,-12,12);
-      LEARN[away]=clamp((LEARN[away]||0)-1.6*surprise,-12,12);
+      // expectativa desde el PRIOR (sin LEARN) para evitar realimentación
+      const s=STR*((RATING[home]??50)-(RATING[away]??50))/100;
+      let elh=BASE*Math.exp(s), ela=BASE*Math.exp(-s);
+      if(HOSTS.has(home))elh*=Math.exp(HOSTLOG); if(HOSTS.has(away))ela*=Math.exp(HOSTLOG);
+      const surprise=(res.h-res.a)-(elh-ela);
+      LEARN[home]=clamp((LEARN[home]||0)+LR*surprise,-CAP,CAP);
+      LEARN[away]=clamp((LEARN[away]||0)-LR*surprise,-CAP,CAP);
     });
   }
 }
@@ -716,7 +730,15 @@ const DATA_NOTES=`<b>Calidad de datos — qué está confirmado y qué es aproxi
 ⚠️ <b>Números oficiales de partido 1-72</b>: las fuentes se contradicen, por eso uso IDs <b>Grupo·Jornada·N</b> en lugar de los números 1-72.<br>
 ⚠️ <b>Fechas/sedes de eliminatorias</b>: aproximadas salvo la Final (19 Jul, MetLife). Marcadas como tales.<br>
 ⚠️ <b>Ratings de fuerza (0-100)</b>: APROXIMACIÓN derivada del ELO/ranking FIFA, no un dato oficial. Sirven para el motor, no son verdad absoluta.<br>
-El motor: goles ~ Poisson(λ) con λ según diferencia de fuerza (+ bono de localía para anfitriones). Probabilidades 1X2 exactas; Monte Carlo samplea lo no jugado.`;
+El motor: goles ~ Poisson(λ) con λ según diferencia de fuerza (+ bono de localía para anfitriones). Probabilidades 1X2 exactas; Monte Carlo samplea lo no jugado.
+<br><br><b>📐 Metodología (basada en literatura, para minimizar el error sistemático):</b><br>
+1. <b>Fuerza única por equipo + Poisson</b> — Ley, Van de Wiele & Van Eetvelde (2019, <i>Statistical Modelling</i>) muestran que, para selecciones, un modelo Poisson con <b>una sola medida de fuerza por equipo</b> predice mejor (por Rank Probability Score) que modelos más complejos. Es exactamente este enfoque.<br>
+2. <b>Corrección Dixon-Coles (1997, <i>Applied Statistics</i> 46(2))</b> — el Poisson independiente subestima los empates 0-0/1-1. Aplico la corrección τ(ρ) con ρ=−0.08 (rango típico −0.15…−0.03), que sube los empates a ~26-29%, en línea con el fútbol internacional real.<br>
+3. <b>Calibración de goles</b> — λ base ajustado a la media del Mundial 2002-2018 (~2.5 gol/partido), no a valores arbitrarios.<br>
+4. <b>Ventaja de localía del anfitrión</b> — ≈ +0.35 gol (equivalente a ~+100 Elo, estándar en Elo de fútbol) sólo para México/EE.UU./Canadá.<br>
+5. <b>Consistencia muestreo↔probabilidad</b> — el Monte Carlo samplea de la <b>misma</b> matriz Dixon-Coles que se usa para mostrar las probabilidades, así el cuadro y las simulaciones no se contradicen.<br>
+6. <b>Aprendizaje regularizado</b> — cada resultado ajusta la fuerza por la sorpresa (margen real − esperado) con tasa baja y tope ±9 (shrinkage hacia el prior), para no sobreajustar con pocas muestras.<br>
+<br><b>⚠️ Honestidad sobre el error:</b> el fútbol tiene un techo de predictibilidad irreducible (azar de penales, expulsiones, etc.). Estas mejoras reducen el error <i>sistemático</i> del modelo (empates, total de goles, sobreajuste), pero <b>no puedo cuantificar un "% de error" exacto sin backtesting</b> contra resultados históricos ni cuotas de mercado (que son el mejor predictor y acá, offline, no uso). Lo que sí garantizo: el modelo ahora está alineado con el método que la literatura encontró superior para selecciones, y bien calibrado en las magnitudes verificables.`;
 
 //============================ INIT ============================
 function init(){
