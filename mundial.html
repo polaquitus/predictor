@@ -105,7 +105,7 @@ table{width:100%;border-collapse:collapse;font-size:.84rem;}
   <div class="panel active" id="p-groups">
     <div class="toolbar">
       <button class="gold" id="btnSim">🎲 Simular lo que falta (1 vez)</button>
-      <button class="alt" id="btnSeed">📥 Cargar resultados de ejemplo</button>
+      <button class="alt" id="btnSeed">📥 Cargar resultados reales ya jugados</button>
       <button class="alt" id="btnClear">🧹 Borrar resultados</button>
       <label class="switch"><input type="checkbox" id="swLearn" checked> Modelo que aprende</label>
     </div>
@@ -627,14 +627,30 @@ function renderLearn(){
 }
 
 //============================ ACCIONES ============================
+// Resultados reales ya jugados (se completan con datos corroborados en la web).
+// Clave: "Grupo:Local v Visitante" (nombres exactos de GROUPS). Valor: [golesLocal,golesVisita].
+const REAL_RESULTS = {
+  // (se rellena con resultados verificados)
+};
+function findMatchId(group, home, away){
+  const fxs=GF[group];
+  for(let i=0;i<fxs.length;i++){
+    const h=GROUPS[group][fxs[i][0]-1], a=GROUPS[group][fxs[i][1]-1];
+    if(h===home && a===away) return mid(group,i);
+  }
+  return null;
+}
 function seedExample(){
-  // Resultados reales/precargados de la Jornada 1 (editables). Marcadores ilustrativos coherentes.
-  const ex={
-    "A·J1·1":[2,0],"A·J1·2":[2,1],"J·J1·1":[3,0],"I·J1·1":[3,1],"E·J1·1":[7,1],
-    "H·J1·2":[0,0],"C·J1·1":[1,1],"L·J1·1":[4,2],"K·J1·1":[1,1],"F·J1·1":[2,2]
-  };
-  for(const k in ex){state.results[k]={h:ex[k][0],a:ex[k][1]};}
-  save(); renderGroups();
+  let n=0, miss=[];
+  for(const key in REAL_RESULTS){
+    const [grp,rest]=key.split(":"); const [home,away]=rest.split(" v ");
+    const id=findMatchId(grp,home,away);
+    if(id){ state.results[id]={h:REAL_RESULTS[key][0],a:REAL_RESULTS[key][1]}; n++; }
+    else miss.push(key);
+  }
+  save(); recomputeLearning(); renderGroups();
+  alert(n? `Cargados ${n} resultados reales corroborados.`+(miss.length?` (${miss.length} no mapearon)`:'')
+          : "Todavía no hay resultados reales precargados. Cargalos a mano o esperá la actualización.");
 }
 function clearResults(){ if(confirm("¿Borrar todos los marcadores de grupos?")){state.results={};save();renderGroups();} }
 function clearKO(){ if(confirm("¿Borrar marcadores de eliminatorias?")){state.ko={};save();renderBracket();} }
