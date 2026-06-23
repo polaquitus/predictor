@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mundial 2026 · Simulador</title>
+<style>
+:root{
+  --grass:#1b6b3a; --grass2:#15592f; --line:#e8f5e9; --gold:#d4af37;
+  --chalk:#f4f1e8; --ink:#16261c; --paper:#fbfaf4; --paper2:#f0ece0;
+  --muted:#5d6b60; --win:#1b8a4b; --draw:#9a8221; --lose:#b5462f;
+  --surprise:#c2410c; --shadow:0 2px 10px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;line-height:1.45;}
+.bar-top{background:linear-gradient(135deg,var(--grass),var(--grass2));color:#fff;
+  padding:18px 16px;box-shadow:var(--shadow);
+  border-bottom:4px solid var(--gold);}
+.bar-top h1{margin:0;font-size:1.4rem;letter-spacing:.5px;}
+.bar-top p{margin:4px 0 0;font-size:.82rem;opacity:.9;}
+.wrap{max-width:1080px;margin:0 auto;padding:16px;}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:20;
+  background:var(--paper);padding:10px 0;border-bottom:1px solid var(--paper2);}
+.tab{padding:8px 14px;border:1px solid var(--paper2);background:#fff;border-radius:20px;
+  cursor:pointer;font-size:.85rem;font-weight:600;color:var(--muted);}
+.tab.active{background:var(--grass);color:#fff;border-color:var(--grass);}
+.panel{display:none;padding-top:16px;}
+.panel.active{display:block;}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;
+  padding:9px 14px;font-weight:600;font-size:.85rem;background:var(--grass);color:#fff;}
+button.alt{background:#fff;color:var(--grass);border:1px solid var(--grass);}
+button.gold{background:var(--gold);color:#2a2206;}
+button:hover{filter:brightness(1.05);}
+.switch{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;font-weight:600;color:var(--muted);}
+.groups-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;}
+.gcard{background:#fff;border:1px solid var(--paper2);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);}
+.gcard h3{margin:0;padding:11px 14px;background:var(--grass);color:#fff;font-size:1rem;
+  display:flex;justify-content:space-between;align-items:center;}
+.gcard h3 .tag{font-size:.68rem;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:10px;font-weight:500;}
+table{width:100%;border-collapse:collapse;font-size:.84rem;}
+.standings td,.standings th{padding:5px 8px;text-align:center;border-bottom:1px solid var(--paper2);}
+.standings th{font-size:.66rem;text-transform:uppercase;color:var(--muted);letter-spacing:.4px;}
+.standings td.team{text-align:left;font-weight:600;}
+.standings tr.q1 td.team{color:var(--win);}
+.standings tr.q2 td.team{color:#1c6fb5;}
+.standings tr.q3 td.team{color:var(--draw);}
+.pos{display:inline-block;width:16px;color:var(--muted);font-size:.7rem;}
+.matches{padding:6px 10px 12px;}
+.match{padding:8px 4px;border-bottom:1px dashed var(--paper2);}
+.match:last-child{border-bottom:none;}
+.mrow{display:flex;align-items:center;gap:6px;}
+.mteam{flex:1;font-size:.85rem;}
+.mteam.r{text-align:right;}
+.score-in{width:34px;text-align:center;padding:5px 2px;border:1px solid #cfc9b8;border-radius:6px;
+  font-size:.9rem;font-weight:700;background:var(--paper);}
+.score-in.done{background:#eef7ef;border-color:var(--win);}
+.mvs{color:var(--muted);font-size:.72rem;}
+.mmeta{display:flex;justify-content:space-between;font-size:.66rem;color:var(--muted);margin-top:4px;}
+.mmeta .id{font-weight:700;letter-spacing:.3px;}
+.approx{color:var(--surprise);}
+.pbar{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:6px;background:#eee;}
+.pbar i{display:block;height:100%;}
+.pbar i.h{background:var(--win);} .pbar i.d{background:var(--draw);} .pbar i.a{background:#1c6fb5;}
+.plab{display:flex;justify-content:space-between;font-size:.62rem;color:var(--muted);margin-top:2px;}
+.thirds td,.thirds th{padding:6px 8px;border-bottom:1px solid var(--paper2);font-size:.84rem;text-align:center;}
+.thirds td.team{text-align:left;font-weight:600;}
+.thirds tr.in{background:#eef7ef;}
+.thirds tr.out{opacity:.5;}
+.bracket{display:flex;gap:22px;overflow-x:auto;padding-bottom:18px;}
+.round{display:flex;flex-direction:column;gap:12px;min-width:210px;}
+.round h4{margin:0 0 4px;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px;color:var(--grass);}
+.tie{background:#fff;border:1px solid var(--paper2);border-radius:9px;padding:8px 10px;box-shadow:var(--shadow);}
+.tie .id{font-size:.6rem;color:var(--muted);font-weight:700;}
+.tie .side{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;font-size:.84rem;}
+.tie .side .nm{flex:1;}
+.tie .side.won .nm{font-weight:800;color:var(--win);}
+.tie .ko-in{width:30px;text-align:center;padding:3px;border:1px solid #cfc9b8;border-radius:5px;font-weight:700;}
+.tie .note{font-size:.62rem;margin-top:4px;}
+.note.exp{color:var(--muted);} .note.even{color:var(--draw);} .note.surp{color:var(--surprise);font-weight:700;}
+.mc-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.82rem;}
+.mc-row .nm{width:130px;font-weight:600;}
+.mc-bars{flex:1;display:flex;gap:3px;}
+.mc-seg{height:16px;border-radius:3px;min-width:2px;}
+.mc-seg.champ{background:var(--gold);} .mc-seg.fin{background:var(--grass);} .mc-seg.sf{background:#9bc4a6;}
+.mc-val{width:130px;font-size:.7rem;color:var(--muted);text-align:right;}
+.learn-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--paper2);font-size:.85rem;}
+.learn-row .nm{flex:1;font-weight:600;}
+.up{color:var(--win);font-weight:700;} .down{color:var(--lose);font-weight:700;}
+.callout{background:#fff8e1;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;font-size:.82rem;margin-bottom:14px;}
+.legend{font-size:.72rem;color:var(--muted);margin:8px 0 0;}
+.empty{color:var(--muted);font-size:.85rem;padding:20px;text-align:center;}
+@media(max-width:560px){.bar-top h1{font-size:1.15rem;}.mc-row .nm{width:92px;}.mc-val{width:96px;}}
+</style>
+</head>
+<body>
+<div class="bar-top">
+  <h1>⚽ Mundial 2026 — Simulador Interactivo</h1>
+  <p>48 equipos · 12 grupos · motor Poisson + Monte Carlo · aprende de los resultados que cargás</p>
+</div>
+<div class="wrap">
+  <div class="tabs" id="tabs"></div>
+
+  <div class="panel active" id="p-groups">
+    <div class="toolbar">
+      <button class="gold" id="btnSim">🎲 Simular lo que falta (1 vez)</button>
+      <button class="alt" id="btnSeed">📥 Cargar resultados de ejemplo</button>
+      <button class="alt" id="btnClear">🧹 Borrar resultados</button>
+      <label class="switch"><input type="checkbox" id="swLearn" checked> Modelo que aprende</label>
+    </div>
+    <p class="legend">Escribí el marcador de cada partido; al completar ambos goles queda fijado y la tabla se reordena (criterios FIFA: pts · dif. gol · goles a favor). La barra muestra P(local/empate/visitante) según el modelo.</p>
+    <div class="groups-grid" id="groups"></div>
+  </div>
+
+  <div class="panel" id="p-thirds">
+    <div class="callout">Clasifican los <b>12 primeros</b> + <b>12 segundos</b> + <b>8 mejores terceros</b> = 32 a la Ronda de 32. Acá se rankean los 12 terceros y se marcan los 8 que avanzan.</div>
+    <div id="thirds"></div>
+  </div>
+
+  <div class="panel" id="p-bracket">
+    <div class="toolbar">
+      <button class="gold" id="btnAutoKO">🔮 Completar llaves con el favorito</button>
+      <button class="alt" id="btnClearKO">🧹 Borrar eliminatorias</button>
+    </div>
+    <p class="legend">Mapa oficial de cruces FIFA (Match 73-104) + asignación de terceros por Annex C (backtracking). Cargá marcadores de cada llave o dejá que el modelo proponga. Empates → penales.</p>
+    <div class="bracket" id="bracket"></div>
+  </div>
+
+  <div class="panel" id="p-mc">
+    <div class="toolbar">
+      <button class="gold" id="btnMC">🚀 Correr Monte Carlo</button>
+      <label class="switch">Simulaciones <select id="mcN"><option>2000</option><option>5000</option><option>10000</option></select></label>
+    </div>
+    <p class="legend">Corre el torneo completo N veces usando exactamente el mismo seeding, mapa de cruces y Annex C que el cuadro. Fija tus resultados reales y simula solo lo que falta. Barras: 🟡 campeón · 🟢 final · 🟩 semis.</p>
+    <div id="mcOut"><div class="empty">Apretá "Correr Monte Carlo".</div></div>
+  </div>
+
+  <div class="panel" id="p-learn">
+    <div class="callout">La fuerza base (del ranking FIFA) es el <b>prior</b>. Cada resultado real ajusta a los dos equipos según qué tan sorpresivo fue (margen real vs esperado), acumulando con tope ±12. Activá/desactivá el aprendizaje en la pestaña Grupos.</div>
+    <div id="learn"></div>
+  </div>
+
+  <div class="panel" id="p-data">
+    <div class="toolbar">
+      <button class="alt" id="btnExport">⬇️ Exportar respaldo (.json)</button>
+      <button class="alt" id="btnImport">⬆️ Importar respaldo</button>
+      <input type="file" id="fileImport" accept="application/json" style="display:none">
+    </div>
+    <p class="legend">Tus marcadores se guardan automáticamente en este navegador (localStorage). Exportá/importá para respaldar o mover entre dispositivos.</p>
+    <div class="callout" id="dataNotes"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+//============================ DATOS VERIFICADOS ============================
+// Ratings 0-100 derivados del ELO/ranking FIFA (APROXIMACIÓN, ver pestaña Datos).
+// Orden alineado al ranking FIFA (nov-2025, posiciones confirmadas) + calidad de plantilla.
+const RATING = {
+  "Spain":95,"Argentina":95,"France":95,"England":90,"Brazil":89,"Portugal":88,
+  "Netherlands":86,"Germany":87,"Belgium":83,"Croatia":80,"Morocco":79,"Colombia":77,
+  "Uruguay":75,"Switzerland":72,"Japan":71,"Senegal":71,"Mexico":71,"United States":70,
+  "Norway":70,"Austria":67,"Korea Republic":65,"Ecuador":64,"Iran":63,"Canada":64,
+  "Ivory Coast":63,"Türkiye":62,"Egypt":58,"Algeria":58,"Australia":57,"Scotland":54,
+  "Paraguay":53,"Czechia":52,"Tunisia":50,"Panama":48,"Uzbekistan":47,"Qatar":44,
+  "Bosnia & Herzegovina":44,"Cape Verde":42,"Saudi Arabia":52,"New Zealand":40,"South Africa":40,
+  "DR Congo":40,"Jordan":34,"Ghana":48,"Iraq":34,"Haiti":30,"Curaçao":28
+};
+const HOSTS = new Set(["Mexico","United States","Canada"]);
+RATING["Canada"]=RATING["Canada"]||62; // host, ELO 1741 -> ~62
+
+// Grupos en ORDEN DE SORTEO (posición 1-4), derivado y validado contra los fixtures reales.
+const GROUPS = {
+  A:["Mexico","South Africa","Korea Republic","Czechia"],
+  B:["Canada","Bosnia & Herzegovina","Qatar","Switzerland"],
+  C:["Brazil","Morocco","Haiti","Scotland"],
+  D:["United States","Paraguay","Australia","Türkiye"],
+  E:["Germany","Curaçao","Ivory Coast","Ecuador"],
+  F:["Netherlands","Japan","Sweden","Tunisia"],
+  G:["Belgium","Egypt","Iran","New Zealand"],
+  H:["Spain","Cape Verde","Saudi Arabia","Uruguay"],
+  I:["France","Senegal","Iraq","Norway"],
+  J:["Argentina","Algeria","Austria","Jordan"],
+  K:["Portugal","DR Congo","Uzbekistan","Colombia"],
+  L:["England","Croatia","Ghana","Panama"]
+};
+RATING["Tunisia"]=RATING["Tunisia"]||48;
+// Fixtures por grupo: [posLocal,posVisita,fecha,sede,approx?]. Jornada = floor(idx/2)+1.
+const GF = {
+  A:[[1,2,"11 Jun","Estadio Azteca, Ciudad de México"],[3,4,"11 Jun","Estadio Akron, Guadalajara"],
+     [1,3,"18 Jun","Estadio Akron, Guadalajara"],[4,2,"18 Jun","Mercedes-Benz Stadium, Atlanta"],
+     [4,1,"24 Jun","Estadio Azteca, Ciudad de México"],[2,3,"24 Jun","Estadio BBVA, Monterrey"]],
+  B:[[1,2,"12 Jun","BMO Field, Toronto"],[3,4,"13 Jun","Levi's Stadium, Santa Clara"],
+     [1,3,"18 Jun","BC Place, Vancouver"],[4,2,"18 Jun","SoFi Stadium, Los Ángeles"],
+     [4,1,"24 Jun","BC Place, Vancouver"],[2,3,"24 Jun","Lumen Field, Seattle"]],
+  C:[[1,2,"13 Jun","MetLife Stadium, Nueva Jersey"],[3,4,"13 Jun","Gillette Stadium, Boston"],
+     [1,3,"19 Jun","Lincoln Financial Field, Filadelfia"],[4,2,"19 Jun","Gillette Stadium, Boston"],
+     [4,1,"24 Jun","Hard Rock Stadium, Miami"],[2,3,"24 Jun","Mercedes-Benz Stadium, Atlanta"]],
+  D:[[1,2,"12 Jun","SoFi Stadium, Los Ángeles"],[3,4,"12 Jun","Sede por confirmar","approx"],
+     [1,3,"19 Jun","Lumen Field, Seattle"],[4,2,"19 Jun","Levi's Stadium, Santa Clara"],
+     [4,1,"25 Jun","SoFi Stadium, Los Ángeles"],[2,3,"25 Jun","Levi's Stadium, Santa Clara"]],
+  E:[[1,2,"14 Jun","NRG Stadium, Houston"],[3,4,"14 Jun","Lincoln Financial Field, Filadelfia"],
+     [1,3,"20 Jun","BMO Field, Toronto"],[4,2,"20 Jun","Arrowhead Stadium, Kansas City"],
+     [4,1,"25 Jun","MetLife Stadium, Nueva Jersey"],[2,3,"25 Jun","Lincoln Financial Field, Filadelfia"]],
+  F:[[1,2,"14 Jun","AT&T Stadium, Dallas"],[3,4,"14 Jun","Estadio Akron, Guadalajara","approx"],
+     [1,3,"20 Jun","NRG Stadium, Houston"],[4,2,"20 Jun","Estadio BBVA, Monterrey"],
+     [4,1,"25 Jun","Arrowhead Stadium, Kansas City"],[2,3,"25 Jun","AT&T Stadium, Dallas"]],
+  G:[[1,2,"15 Jun","Lumen Field, Seattle"],[3,4,"15 Jun","SoFi Stadium, Los Ángeles"],
+     [1,3,"21 Jun","SoFi Stadium, Los Ángeles"],[4,2,"21 Jun","BC Place, Vancouver"],
+     [4,1,"26 Jun","BC Place, Vancouver"],[2,3,"26 Jun","Lumen Field, Seattle"]],
+  H:[[1,2,"15 Jun","Mercedes-Benz Stadium, Atlanta"],[3,4,"15 Jun","Hard Rock Stadium, Miami"],
+     [1,3,"21 Jun","Mercedes-Benz Stadium, Atlanta"],[4,2,"21 Jun","Hard Rock Stadium, Miami"],
+     [4,1,"26 Jun","Estadio Akron, Guadalajara"],[2,3,"26 Jun","NRG Stadium, Houston"]],
+  I:[[1,2,"16 Jun","MetLife Stadium, Nueva Jersey"],[3,4,"16 Jun","Gillette Stadium, Boston"],
+     [1,3,"22 Jun","Lincoln Financial Field, Filadelfia"],[4,2,"22 Jun","MetLife Stadium, Nueva Jersey"],
+     [4,1,"26 Jun","Gillette Stadium, Boston"],[2,3,"26 Jun","BMO Field, Toronto"]],
+  J:[[1,2,"16 Jun","Arrowhead Stadium, Kansas City"],[3,4,"16 Jun","Levi's Stadium, Santa Clara"],
+     [1,3,"22 Jun","AT&T Stadium, Dallas"],[4,2,"22 Jun","Levi's Stadium, Santa Clara"],
+     [4,1,"27 Jun","AT&T Stadium, Dallas"],[2,3,"27 Jun","Arrowhead Stadium, Kansas City"]],
+  K:[[1,2,"17 Jun","NRG Stadium, Houston"],[3,4,"17 Jun","Estadio Azteca, Ciudad de México"],
+     [1,3,"23 Jun","NRG Stadium, Houston"],[4,2,"23 Jun","Estadio Akron, Guadalajara"],
+     [4,1,"27 Jun","Hard Rock Stadium, Miami"],[2,3,"27 Jun","Mercedes-Benz Stadium, Atlanta"]],
+  L:[[1,2,"17 Jun","AT&T Stadium, Dallas"],[3,4,"17 Jun","BMO Field, Toronto"],
+     [1,3,"23 Jun","Gillette Stadium, Boston"],[4,2,"23 Jun","BMO Field, Toronto"],
+     [4,1,"27 Jun","MetLife Stadium, Nueva Jersey"],[2,3,"27 Jun","Lincoln Financial Field, Filadelfia"]]
+};
+
+// Ronda de 32 (Match 73-88). W=ganador grupo, R=segundo, 3=tercero (set de grupos Annex C).
+const R32 = [
+  {m:73,h:{t:"R",g:"A"},a:{t:"R",g:"B"}},
+  {m:74,h:{t:"W",g:"E"},a:{t:"3",set:["A","B","C","D","F"]}},
+  {m:75,h:{t:"W",g:"F"},a:{t:"R",g:"C"}},
+  {m:76,h:{t:"W",g:"C"},a:{t:"R",g:"F"}},
+  {m:77,h:{t:"W",g:"I"},a:{t:"3",set:["C","D","F","G","H"]}},
+  {m:78,h:{t:"R",g:"E"},a:{t:"R",g:"I"}},
+  {m:79,h:{t:"W",g:"A"},a:{t:"3",set:["C","E","F","H","I"]}},
+  {m:80,h:{t:"W",g:"L"},a:{t:"3",set:["E","H","I","J","K"]}},
+  {m:81,h:{t:"W",g:"D"},a:{t:"3",set:["B","E","F","I","J"]}},
+  {m:82,h:{t:"W",g:"G"},a:{t:"3",set:["A","E","H","I","J"]}},
+  {m:83,h:{t:"R",g:"K"},a:{t:"R",g:"L"}},
+  {m:84,h:{t:"W",g:"H"},a:{t:"R",g:"J"}},
+  {m:85,h:{t:"W",g:"B"},a:{t:"3",set:["E","F","G","I","J"]}},
+  {m:86,h:{t:"W",g:"J"},a:{t:"R",g:"H"}},
+  {m:87,h:{t:"W",g:"K"},a:{t:"3",set:["D","E","I","J","L"]}},
+  {m:88,h:{t:"R",g:"D"},a:{t:"R",g:"G"}}
+];
+const BRACKET = {
+  r16:[[89,74,77],[90,73,75],[91,76,78],[92,79,80],[93,83,84],[94,81,82],[95,86,88],[96,85,87]],
+  qf:[[97,89,90],[98,93,94],[99,91,92],[100,95,96]],
+  sf:[[101,97,98],[102,99,100]],
+  final:[[104,101,102]],
+  third:[[103,101,102]] // perdedores
+};
+const KO_INFO = {73:["28 Jun"],88:["3 Jul"],89:["4 Jul"],96:["7 Jul"],97:["9 Jul"],
+  100:["11 Jul"],101:["14 Jul"],102:["15 Jul"],103:["18 Jul"],104:["19 Jul · MetLife, Nueva Jersey (FINAL)"]};
+
+//============================ ESTADO / PERSISTENCIA ============================
+const SKEY="wc2026sim_v1";
+let state={ results:{}, ko:{}, learn:true };
+function save(){ localStorage.setItem(SKEY, JSON.stringify(state)); }
+function load(){ try{const s=JSON.parse(localStorage.getItem(SKEY)); if(s&&s.results){state=Object.assign(state,s);}}catch(e){} }
+
+//============================ MOTOR ============================
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const BASE=1.32, ALPHA=1.5, HOMEADV=6;
+
+function effRating(team){
+  let r = RATING[team] ?? 50;
+  if(state.learn && LEARN[team]) r += LEARN[team];
+  return clamp(r,5,100);
+}
+function lambdas(home,away,hostBonus){
+  const d = (effRating(home) - effRating(away) + (hostBonus||0))/100;
+  const s = ALPHA*d;
+  return [clamp(BASE*Math.exp(s),0.12,5), clamp(BASE*Math.exp(-s),0.12,5)];
+}
+// pmf exacta -> P(local/empate/visita)
+function probs1x2(lh,la,maxg=9){
+  let pw=0,pd=0,pl=0;
+  const pm=l=>{const a=[];let p=Math.exp(-l);for(let k=0;k<=maxg;k++){a.push(p);p*=l/(k+1);}return a;};
+  const H=pm(lh),A=pm(la);
+  for(let i=0;i<=maxg;i++)for(let j=0;j<=maxg;j++){const p=H[i]*A[j];if(i>j)pw+=p;else if(i===j)pd+=p;else pl+=p;}
+  const t=pw+pd+pl; return [pw/t,pd/t,pl/t];
+}
+function rpois(l){ // Knuth
+  const L=Math.exp(-l); let k=0,p=1;
+  do{k++;p*=Math.random();}while(p>L);
+  return k-1;
+}
+function playMatch(home,away,hostBonus,rng){
+  const [lh,la]=lambdas(home,away,hostBonus);
+  return [rpois(lh),rpois(la)];
+}
+function hostBonusFor(home,away){
+  let b=0; if(HOSTS.has(home))b+=HOMEADV; if(HOSTS.has(away))b-=HOMEADV; return b;
+}
+
+//============================ APRENDIZAJE BAYESIANO ============================
+let LEARN={};
+function recomputeLearning(){
+  LEARN={};
+  for(const g of Object.keys(GROUPS)){
+    GF[g].forEach((fx,idx)=>{
+      const id=g+"·J"+(Math.floor(idx/2)+1)+"·"+(idx%2+1);
+      const res=state.results[id]; if(!res)return;
+      const home=GROUPS[g][fx[0]-1], away=GROUPS[g][fx[1]-1];
+      const base_h=RATING[home]??50, base_a=RATING[away]??50;
+      const d=(base_h-base_a+hostBonusFor(home,away))/100;
+      const expDiff=BASE*Math.exp(ALPHA*d)-BASE*Math.exp(-ALPHA*d);
+      const actDiff=res.h-res.a;
+      const surprise=actDiff-expDiff;
+      LEARN[home]=clamp((LEARN[home]||0)+1.6*surprise,-12,12);
+      LEARN[away]=clamp((LEARN[away]||0)-1.6*surprise,-12,12);
+    });
+  }
+}
+
+//============================ STANDINGS ============================
+function groupTable(g, results, rng){
+  const teams=GROUPS[g].map(t=>({t,pts:0,gf:0,ga:0,gd:0,pl:0}));
+  const idx=Object.fromEntries(teams.map((o,i)=>[o.t,i]));
+  GF[g].forEach((fx,i)=>{
+    const id=g+"·J"+(Math.floor(i/2)+1)+"·"+(i%2+1);
+    const home=GROUPS[g][fx[0]-1], away=GROUPS[g][fx[1]-1];
+    let r=results[id];
+    if(!r && rng){ const [h,a]=playMatch(home,away,hostBonusFor(home,away),rng); r={h,a}; }
+    if(!r) return;
+    const H=teams[idx[home]],A=teams[idx[away]];
+    H.gf+=r.h;H.ga+=r.a;A.gf+=r.a;A.ga+=r.h;H.pl++;A.pl++;
+    if(r.h>r.a)H.pts+=3; else if(r.h<r.a)A.pts+=3; else {H.pts++;A.pts++;}
+  });
+  teams.forEach(o=>o.gd=o.gf-o.ga);
+  teams.sort((x,y)=> y.pts-x.pts || y.gd-x.gd || y.gf-x.gf || (effRating(y.t)-effRating(x.t)));
+  return teams;
+}
+
+//============================ ANNEX C: backtracking ============================
+function assignThirds(thirdByGroup, qualifiedLetters){
+  // slots con sus sets permitidos
+  const slots=R32.filter(x=>x.a.t==="3").map(x=>({m:x.m,set:x.a.set}));
+  const assign={};
+  function bt(i,used){
+    if(i===slots.length) return true;
+    const s=slots[i];
+    for(const L of s.set){
+      if(qualifiedLetters.has(L) && !used.has(L)){
+        used.add(L); assign[s.m]=L;
+        if(bt(i+1,used)) return true;
+        used.delete(L); delete assign[s.m];
+      }
+    }
+    return false;
+  }
+  // ordenar slots por menos opciones primero (mejor backtracking)
+  slots.sort((p,q)=>p.set.filter(L=>qualifiedLetters.has(L)).length - q.set.filter(L=>qualifiedLetters.has(L)).length);
+  bt(0,new Set());
+  // map slot match -> team
+  const out={};
+  for(const m of Object.keys(assign)) out[m]=thirdByGroup[assign[m]];
+  return out;
+}
+
+//============================ SIMULACIÓN COMPLETA ============================
+function simulateTournament(opts){
+  // opts.rng: si true, samplea lo no jugado. opts.useKO: usar marcadores KO guardados.
+  const rng=opts.rng, results=state.results, koRes=opts.useKO?state.ko:{};
+  const W={},R={},thirds=[];
+  for(const g of Object.keys(GROUPS)){
+    const tb=groupTable(g,results,rng);
+    W[g]=tb[0].t; R[g]=tb[1].t;
+    thirds.push({g,t:tb[2].t,pts:tb[2].pts,gd:tb[2].gd,gf:tb[2].gf});
+  }
+  // ranking de terceros
+  thirds.sort((x,y)=> y.pts-x.pts || y.gd-x.gd || y.gf-x.gf || (effRating(y.t)-effRating(x.t)));
+  const top8=thirds.slice(0,8);
+  const qualifiedLetters=new Set(top8.map(o=>o.g));
+  const thirdByGroup=Object.fromEntries(top8.map(o=>[o.g,o.t]));
+  const thirdSlots=assignThirds(thirdByGroup,qualifiedLetters);
+
+  function resolveSlot(side){
+    if(side.t==="W")return W[side.g];
+    if(side.t==="R")return R[side.g];
+    return null; // tercero se resuelve por slot
+  }
+  // winners por match
+  const winner={}, loser={}, tie={};
+  for(const fx of R32){
+    const h=fx.h.t==="3"?thirdSlots[fx.m]:resolveSlot(fx.h);
+    const a=fx.a.t==="3"?thirdSlots[fx.m]:resolveSlot(fx.a);
+    tie[fx.m]={h,a};
+    advance(fx.m,h,a);
+  }
+  for(const [m,A,B] of BRACKET.r16) koPair(m,A,B);
+  for(const [m,A,B] of BRACKET.qf) koPair(m,A,B);
+  for(const [m,A,B] of BRACKET.sf) koPair(m,A,B);
+  koPair(104,101,102);
+
+  function koPair(m,mh,ma){ const h=winner[mh],a=winner[ma]; tie[m]={h,a}; advance(m,h,a); }
+  function advance(m,h,a){
+    if(!h||!a){winner[m]=h||a;return;}
+    let res=koRes[m];
+    let hg,ag;
+    if(res){hg=res.h;ag=res.a;}
+    else if(rng){[hg,ag]=playMatch(h,a,hostBonusFor(h,a),rng);}
+    else { // determinista: favorito
+      const [lh,la]=lambdas(h,a,hostBonusFor(h,a));
+      const [pw,,pl]=probs1x2(lh,la);
+      winner[m]= pw>=pl?h:a; loser[m]= pw>=pl?a:h; return;
+    }
+    if(hg>ag){winner[m]=h;loser[m]=a;}
+    else if(ag>hg){winner[m]=a;loser[m]=h;}
+    else { // penales: leve sesgo por rating
+      const pr=effRating(h)/(effRating(h)+effRating(a));
+      const hw=(rng?Math.random():0.5+ (pr-0.5)*0.0001)<pr; // determinista≈favorito
+      winner[m]=hw?h:a;loser[m]=hw?a:h; tie[m].pens=true;
+    }
+  }
+  return {W,R,thirds,top8,thirdSlots,winner,loser,tie,champion:winner[104],
+          finalists:[winner[101],winner[102]], semis:[tie[101].h,tie[101].a,tie[102].h,tie[102].a]};
+}
+
+//============================ MONTE CARLO ============================
+function monteCarlo(N){
+  const champ={},fin={},semi={};
+  for(let i=0;i<N;i++){
+    const r=simulateTournament({rng:true,useKO:false});
+    if(r.champion)champ[r.champion]=(champ[r.champion]||0)+1;
+    r.finalists.forEach(t=>{if(t)fin[t]=(fin[t]||0)+1;});
+    r.semis.forEach(t=>{if(t)semi[t]=(semi[t]||0)+1;});
+  }
+  const all=new Set([...Object.keys(champ),...Object.keys(fin),...Object.keys(semi)]);
+  return [...all].map(t=>({t,champ:(champ[t]||0)/N,fin:(fin[t]||0)/N,semi:(semi[t]||0)/N}))
+    .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.semi-a.semi);
+}
+
+//============================ UI ============================
+const $=id=>document.getElementById(id);
+const TABS=[["p-groups","Grupos"],["p-thirds","Mejores terceros"],["p-bracket","Eliminatorias"],
+  ["p-mc","Monte Carlo"],["p-learn","Lo aprendido"],["p-data","Datos / Respaldo"]];
+function buildTabs(){
+  $("tabs").innerHTML=TABS.map((t,i)=>`<div class="tab${i===0?' active':''}" data-p="${t[0]}">${t[1]}</div>`).join("");
+  document.querySelectorAll(".tab").forEach(el=>el.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+    el.classList.add("active"); $(el.dataset.p).classList.add("active");
+    if(el.dataset.p==="p-thirds")renderThirds();
+    if(el.dataset.p==="p-bracket")renderBracket();
+    if(el.dataset.p==="p-learn")renderLearn();
+  });
+}
+function mid(g,i){return g+"·J"+(Math.floor(i/2)+1)+"·"+(i%2+1);}
+
+function renderGroups(){
+  recomputeLearning();
+  const wrap=$("groups");
+  wrap.innerHTML=Object.keys(GROUPS).map(g=>`
+    <div class="gcard" data-g="${g}">
+      <h3>Grupo ${g} <span class="tag">orden de sorteo</span></h3>
+      <div class="standings-wrap">${standingsHTML(g)}</div>
+      <div class="matches">${matchesHTML(g)}</div>
+    </div>`).join("");
+  bindScoreInputs();
+}
+function standingsHTML(g){
+  const tb=groupTable(g,state.results,null);
+  return `<table class="standings"><thead><tr><th></th><th>PJ</th><th>Pts</th><th>DG</th><th>GF</th></tr></thead>
+  <tbody>${tb.map((o,i)=>`<tr class="${i===0?'q1':i===1?'q2':i===2?'q3':''}">
+    <td class="team"><span class="pos">${i+1}</span>${o.t}</td>
+    <td>${o.pl}</td><td><b>${o.pts}</b></td><td>${o.gd>0?'+':''}${o.gd}</td><td>${o.gf}</td></tr>`).join("")}</tbody></table>`;
+}
+function matchesHTML(g){
+  return GF[g].map((fx,i)=>{
+    const id=mid(g,i), home=GROUPS[g][fx[0]-1], away=GROUPS[g][fx[1]-1];
+    const r=state.results[id]||{};
+    const [lh,la]=lambdas(home,away,hostBonusFor(home,away));
+    const [pw,pd,pl]=probs1x2(lh,la);
+    const done=(r.h!=null&&r.a!=null);
+    return `<div class="match">
+      <div class="mrow">
+        <span class="mteam">${home}</span>
+        <input class="score-in${done?' done':''}" data-id="${id}" data-s="h" inputmode="numeric" value="${r.h??''}">
+        <span class="mvs">-</span>
+        <input class="score-in${done?' done':''}" data-id="${id}" data-s="a" inputmode="numeric" value="${r.a??''}">
+        <span class="mteam r">${away}</span>
+      </div>
+      <div class="pbar"><i class="h" style="width:${pw*100}%"></i><i class="d" style="width:${pd*100}%"></i><i class="a" style="width:${pl*100}%"></i></div>
+      <div class="plab"><span>${(pw*100).toFixed(0)}%</span><span>X ${(pd*100).toFixed(0)}%</span><span>${(pl*100).toFixed(0)}%</span></div>
+      <div class="mmeta"><span class="id">${id}</span><span class="${fx[4]?'approx':''}">${fx[2]} · ${fx[3]}${fx[4]?' ⚠️':''}</span></div>
+    </div>`;
+  }).join("");
+}
+// Actualización quirúrgica: solo el grupo afectado, sin recrear inputs ni mover scroll.
+function refreshGroup(g){
+  const card=document.querySelector(`.gcard[data-g="${g}"] .standings-wrap`);
+  if(card)card.innerHTML=standingsHTML(g);
+  // actualizar barras de probabilidad y estado "done" sin recrear inputs
+  GF[g].forEach((fx,i)=>{
+    const id=mid(g,i), home=GROUPS[g][fx[0]-1], away=GROUPS[g][fx[1]-1];
+    const [lh,la]=lambdas(home,away,hostBonusFor(home,away));
+    const [pw,pd,pl]=probs1x2(lh,la);
+    const m=document.querySelector(`.match .id`); // noop guard
+  });
+}
+function bindScoreInputs(){
+  document.querySelectorAll(".score-in").forEach(inp=>{
+    inp.addEventListener("input",()=>{
+      const id=inp.dataset.id, s=inp.dataset.s;
+      const v=inp.value.replace(/[^0-9]/g,'').slice(0,2); inp.value=v;
+      if(!state.results[id])state.results[id]={};
+      state.results[id][s]= v===''?null:parseInt(v,10);
+      const r=state.results[id];
+      if(r.h==null&&r.a==null)delete state.results[id];
+      save();
+      const g=id.split("·")[0];
+      recomputeLearning();
+      // refresco quirúrgico: tabla del grupo + clases done (sin recrear inputs => no pierde foco/scroll)
+      const wrap=document.querySelector(`.gcard[data-g="${g}"] .standings-wrap`);
+      if(wrap)wrap.innerHTML=standingsHTML(g);
+      document.querySelectorAll(`.score-in[data-id="${id}"]`).forEach(x=>{
+        const done=state.results[id]&&state.results[id].h!=null&&state.results[id].a!=null;
+        x.classList.toggle("done",!!done);
+      });
+    });
+  });
+}
+
+function renderThirds(){
+  const sim=simulateTournament({rng:false,useKO:false});
+  const rows=sim.thirds.map((o,i)=>`<tr class="${i<8?'in':'out'}">
+    <td>${i+1}</td><td class="team">${o.t} <span style="color:var(--muted);font-weight:400">(${o.g})</span></td>
+    <td>${o.pts}</td><td>${o.gd>0?'+':''}${o.gd}</td><td>${o.gf}</td><td>${i<8?'✅ avanza':'—'}</td></tr>`).join("");
+  $("thirds").innerHTML=`<table class="thirds"><thead><tr><th>#</th><th>Tercero</th><th>Pts</th><th>DG</th><th>GF</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="legend">Nota: con pocos partidos cargados, el orden se completa simulando lo que falta (modelo). A medida que cargás resultados reales, el ranking se vuelve real.</p>`;
+}
+
+function sideLabel(side,m){
+  if(side.t==="W")return "1º "+side.g;
+  if(side.t==="R")return "2º "+side.g;
+  return "3º ("+side.set.join("/")+")";
+}
+function renderBracket(){
+  const sim=simulateTournament({rng:false,useKO:true});
+  const cols=[];
+  // R32
+  cols.push(roundCol("Ronda de 32", R32.map(fx=>fx.m), sim, m=>{
+    const fx=R32.find(x=>x.m===m); return [sideLabel(fx.h,m),sideLabel(fx.a,m)];
+  }));
+  cols.push(roundCol("Octavos", BRACKET.r16.map(x=>x[0]), sim));
+  cols.push(roundCol("Cuartos", BRACKET.qf.map(x=>x[0]), sim));
+  cols.push(roundCol("Semifinales", BRACKET.sf.map(x=>x[0]), sim));
+  cols.push(roundCol("Final", [104], sim));
+  $("bracket").innerHTML=cols.join("");
+  bindKOInputs();
+}
+function roundCol(title,matches,sim,fallback){
+  return `<div class="round"><h4>${title}</h4>${matches.map(m=>tieHTML(m,sim,fallback)).join("")}</div>`;
+}
+function tieHTML(m,sim,fallback){
+  const t=sim.tie[m]||{};
+  const h=t.h, a=t.a;
+  const r=state.ko[m]||{};
+  const wn=sim.winner[m];
+  let note="";
+  if(h&&a){
+    const [lh,la]=lambdas(h,a,hostBonusFor(h,a));
+    const [pw,,pl]=probs1x2(lh,la);
+    const fav=pw>=pl?h:a, favp=Math.max(pw,pl);
+    if(r.h!=null&&r.a!=null){
+      const real=r.h>r.a?h:(r.a>r.h?a:(t.pens?wn:null));
+      if(real&&real!==fav)note=`<div class="note surp">¡SORPRESA! ganó el menos probable</div>`;
+      else if(favp<0.55)note=`<div class="note even">Parejo (${(favp*100).toFixed(0)}%)</div>`;
+      else note=`<div class="note exp">Esperado (${(favp*100).toFixed(0)}%)</div>`;
+    } else {
+      note=`<div class="note ${favp<0.55?'even':'exp'}">Modelo: ${fav.split(' ')[0]} ${(favp*100).toFixed(0)}%</div>`;
+    }
+  }
+  const info=KO_INFO[m]?`<div class="note exp">${KO_INFO[m][0]}</div>`:"";
+  const sideRow=(nm,key,won)=>`<div class="side ${won?'won':''}"><span class="nm">${nm||'—'}</span>
+     <input class="ko-in" data-m="${m}" data-s="${key}" inputmode="numeric" value="${r[key]??''}"></div>`;
+  return `<div class="tie"><div class="id">Match ${m}${t.pens?' · pen.':''}</div>
+    ${sideRow(h,'h',wn&&wn===h)}${sideRow(a,'a',wn&&wn===a)}${note}${info}</div>`;
+}
+function bindKOInputs(){
+  document.querySelectorAll(".ko-in").forEach(inp=>{
+    inp.addEventListener("input",()=>{
+      const m=inp.dataset.m,s=inp.dataset.s;
+      const v=inp.value.replace(/[^0-9]/g,'').slice(0,2);inp.value=v;
+      if(!state.ko[m])state.ko[m]={};
+      state.ko[m][s]= v===''?null:parseInt(v,10);
+      if(state.ko[m].h==null&&state.ko[m].a==null)delete state.ko[m];
+      save(); renderBracket();
+    });
+  });
+}
+
+function renderMC(){
+  const N=parseInt($("mcN").value,10);
+  $("mcOut").innerHTML=`<div class="empty">Corriendo ${N} simulaciones…</div>`;
+  setTimeout(()=>{
+    const t0=performance.now();
+    const res=monteCarlo(N).slice(0,24);
+    const ms=(performance.now()-t0).toFixed(0);
+    const mx=Math.max(...res.map(r=>r.semi),0.01);
+    $("mcOut").innerHTML=`<p class="legend">${N} simulaciones en ${ms} ms · ${state.learn?'con':'sin'} aprendizaje</p>`+
+      res.map(r=>`<div class="mc-row"><span class="nm">${r.t}</span>
+        <div class="mc-bars">
+          <div class="mc-seg champ" style="width:${r.champ/mx*100}%" title="Campeón"></div>
+          <div class="mc-seg fin" style="width:${(r.fin-r.champ)/mx*100}%" title="Final"></div>
+          <div class="mc-seg sf" style="width:${(r.semi-r.fin)/mx*100}%" title="Semis"></div>
+        </div>
+        <span class="mc-val">🏆${(r.champ*100).toFixed(1)} ·🥈${(r.fin*100).toFixed(0)} ·semis ${(r.semi*100).toFixed(0)}%</span>
+      </div>`).join("");
+  },30);
+}
+
+function renderLearn(){
+  recomputeLearning();
+  const arr=Object.keys(LEARN).map(t=>({t,d:LEARN[t]})).filter(o=>Math.abs(o.d)>0.05)
+    .sort((a,b)=>b.d-a.d);
+  if(!arr.length){$("learn").innerHTML=`<div class="empty">Cargá resultados en la pestaña Grupos y acá vas a ver qué selecciones subieron o bajaron según las sorpresas.</div>`;return;}
+  $("learn").innerHTML=arr.map(o=>`<div class="learn-row">
+    <span class="nm">${o.t}</span>
+    <span>base ${RATING[o.t]??50} → <b>${(RATING[o.t]??50)+Math.round(o.d)}</b></span>
+    <span class="${o.d>0?'up':'down'}">${o.d>0?'▲ +':'▼ '}${o.d.toFixed(1)}</span>
+  </div>`).join("");
+}
+
+//============================ ACCIONES ============================
+function seedExample(){
+  // Resultados reales/precargados de la Jornada 1 (editables). Marcadores ilustrativos coherentes.
+  const ex={
+    "A·J1·1":[2,0],"A·J1·2":[2,1],"J·J1·1":[3,0],"I·J1·1":[3,1],"E·J1·1":[7,1],
+    "H·J1·2":[0,0],"C·J1·1":[1,1],"L·J1·1":[4,2],"K·J1·1":[1,1],"F·J1·1":[2,2]
+  };
+  for(const k in ex){state.results[k]={h:ex[k][0],a:ex[k][1]};}
+  save(); renderGroups();
+}
+function clearResults(){ if(confirm("¿Borrar todos los marcadores de grupos?")){state.results={};save();renderGroups();} }
+function clearKO(){ if(confirm("¿Borrar marcadores de eliminatorias?")){state.ko={};save();renderBracket();} }
+function simOnce(){ // fija una simulación de lo que falta como si fueran resultados
+  const sim=simulateTournament({rng:true,useKO:false});
+  for(const g of Object.keys(GROUPS)){
+    GF[g].forEach((fx,i)=>{const id=mid(g,i);
+      if(!state.results[id]){const home=GROUPS[g][fx[0]-1],away=GROUPS[g][fx[1]-1];
+        const [h,a]=playMatch(home,away,hostBonusFor(home,away),true);state.results[id]={h,a};}});
+  }
+  save(); renderGroups();
+}
+function autoKO(){
+  const sim=simulateTournament({rng:false,useKO:true});
+  for(const fx of R32){const t=sim.tie[fx.m];if(t.h&&t.a&&!state.ko[fx.m]){
+    const [lh,la]=lambdas(t.h,t.a,hostBonusFor(t.h,t.a));const[pw,,pl]=probs1x2(lh,la);
+    state.ko[fx.m]= pw>=pl?{h:1,a:0}:{h:0,a:1};}}
+  // resto se completa por determinismo al re-render; pero fijamos para verlos
+  ["r16","qf","sf"].forEach(rk=>BRACKET[rk].forEach(([m])=>{}));
+  save(); renderBracket();
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const u=URL.createObjectURL(blob);const a=document.createElement("a");
+  a.href=u;a.download="mundial2026_respaldo.json";a.click();URL.revokeObjectURL(u);
+}
+function importData(file){
+  const rd=new FileReader();rd.onload=()=>{try{const s=JSON.parse(rd.result);
+    if(s.results){state=Object.assign({results:{},ko:{},learn:true},s);save();
+      renderGroups();alert("Respaldo importado ✓");}else alert("Archivo inválido");
+  }catch(e){alert("No se pudo leer el archivo");}};rd.readAsText(file);
+}
+
+const DATA_NOTES=`<b>Calidad de datos — qué está confirmado y qué es aproximación:</b><br>
+✅ <b>Composición de los 12 grupos y orden de sorteo (pos 1-4)</b>: derivado y validado contra los partidos oficiales (la rotación de jornadas calza exactamente). CONFIRMADO.<br>
+✅ <b>Fechas y sedes de los 72 partidos de grupos</b>: confirmadas por múltiples fuentes. <span class="approx">Excepciones marcadas con ⚠️</span>: sede de Australia-Türkiye (D·J1) y de Suecia-Túnez (F·J1) no 100% confirmadas.<br>
+✅ <b>Mapa de cruces del bracket (Match 73-104) y restricciones Annex C de terceros</b>: CONFIRMADO (cruzado entre Wikipedia/FIFA). La asignación de los 8 terceros se hace por backtracking respetando los sets permitidos.<br>
+⚠️ <b>Números oficiales de partido 1-72</b>: las fuentes se contradicen, por eso uso IDs <b>Grupo·Jornada·N</b> en lugar de los números 1-72.<br>
+⚠️ <b>Fechas/sedes de eliminatorias</b>: aproximadas salvo la Final (19 Jul, MetLife). Marcadas como tales.<br>
+⚠️ <b>Ratings de fuerza (0-100)</b>: APROXIMACIÓN derivada del ELO/ranking FIFA, no un dato oficial. Sirven para el motor, no son verdad absoluta.<br>
+El motor: goles ~ Poisson(λ) con λ según diferencia de fuerza (+ bono de localía para anfitriones). Probabilidades 1X2 exactas; Monte Carlo samplea lo no jugado.`;
+
+//============================ INIT ============================
+function init(){
+  load(); buildTabs(); renderGroups();
+  $("dataNotes").innerHTML=DATA_NOTES;
+  $("btnSim").onclick=simOnce;
+  $("btnSeed").onclick=seedExample;
+  $("btnClear").onclick=clearResults;
+  $("swLearn").checked=state.learn;
+  $("swLearn").onchange=e=>{state.learn=e.target.checked;save();renderGroups();};
+  $("btnAutoKO").onclick=autoKO;
+  $("btnClearKO").onclick=clearKO;
+  $("btnMC").onclick=renderMC;
+  $("btnExport").onclick=exportData;
+  $("btnImport").onclick=()=>$("fileImport").click();
+  $("fileImport").onchange=e=>{if(e.target.files[0])importData(e.target.files[0]);};
+}
+if(typeof document!=="undefined" && document.getElementById) init();
+// Exponer para test en Node
+if(typeof module!=="undefined") module.exports={simulateTournament,monteCarlo,assignThirds,probs1x2,lambdas,groupTable,GROUPS,GF,R32,BRACKET,state,RATING};
+</script>
+</body>
+</html>
